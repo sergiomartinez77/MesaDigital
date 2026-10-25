@@ -1,0 +1,19 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Mesa Digital</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>body{font-family:system-ui,sans-serif;background:#fff7ed;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0}
+.box{background:#fff;padding:36px 28px;border-radius:16px;box-shadow:0 4px 24px #0001;max-width:360px;text-align:center}
+h1{margin:0 0 8px}p{color:#555}#err{color:#b91c1c;min-height:20px}a{color:#c2410c}</style></head>
+<body><div class="box"><h1>🍽️ Mesa Digital</h1>
+<p>Menú digital y pedidos por WhatsApp para tu restaurante.</p>
+<div id="g_id_onload" data-client_id="__CLIENT_ID__" data-callback="onCred" data-auto_prompt="false"></div>
+<div class="g_id_signin" data-type="standard" data-size="large" data-text="continue_with" data-locale="es"></div>
+<p id="err"></p>
+<p id="dev" style="display:none"><a href="/auth/dev">Entrar en modo desarrollo</a></p></div>
+<script>
+if("__DEV__"==="1")document.getElementById('dev').style.display='block';
+async function onCred(r){
+  const res=await fetch('/auth/google',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credential:r.credential})});
+  if(res.ok)location='/panel';else{const d=await res.json();document.getElementById('err').textContent=d.detail||'Error al iniciar sesión'}
+}
+</script></body></html>

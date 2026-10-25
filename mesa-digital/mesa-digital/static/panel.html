@@ -1,0 +1,117 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Panel · Mesa Digital</title>
+<style>*{box-sizing:border-box}body{font-family:system-ui,sans-serif;margin:0;background:#f8fafc;color:#1e293b}
+header{background:#fff;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 1px 4px #0001}
+header img{width:30px;height:30px;border-radius:50%;vertical-align:middle;margin-right:8px}
+nav{display:flex;gap:4px;padding:8px 12px;overflow-x:auto;background:#fff;border-top:1px solid #eee}
+nav button{border:0;background:none;padding:10px 14px;border-radius:8px;font:inherit;cursor:pointer;white-space:nowrap}
+nav button.on{background:#ffedd5;color:#c2410c;font-weight:600}
+main{max-width:760px;margin:auto;padding:16px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.card,.box{background:#fff;border-radius:12px;padding:14px;box-shadow:0 1px 4px #0001;margin-bottom:12px}
+.card small{color:#64748b;display:block}.card b{font-size:22px}
+.bars{display:flex;gap:8px;align-items:flex-end;height:130px;background:#fff;padding:12px;border-radius:12px}
+.bars div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%}
+.bars i{display:block;width:100%;background:#fb923c;border-radius:4px 4px 0 0;min-height:2px}
+.bars small{font-size:10px;color:#64748b;margin-top:4px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f1f5f9}
+.chips{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.chips button{border:1px solid #cbd5e1;background:#fff;border-radius:99px;padding:6px 12px;cursor:pointer}
+.chips button.on{background:#c2410c;color:#fff;border-color:#c2410c}
+.badge{padding:2px 8px;border-radius:99px;font-size:12px;background:#e2e8f0}
+.nuevo{background:#fde68a}.preparando{background:#bfdbfe}.listo{background:#bbf7d0}.cancelado{background:#fecaca}
+button.pri{background:#c2410c;color:#fff;border:0;padding:10px 16px;border-radius:8px;cursor:pointer;font:inherit}
+button.sm{border:1px solid #cbd5e1;background:#fff;border-radius:6px;padding:5px 10px;cursor:pointer;font:inherit;font-size:13px}
+button.red{color:#b91c1c}
+input,textarea,select{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;margin:4px 0 10px}
+label{font-size:13px;color:#475569}.muted{color:#64748b}.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#msg{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:10px 18px;border-radius:8px;display:none}</style></head>
+<body>
+<header><div><span id="who"></span></div><a href="/auth/logout">Salir</a></header>
+<nav id="tabs"></nav><main id="view">Cargando…</main><div id="msg"></div>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>'$'+Number(n).toLocaleString('es-CO');
+let me,tab='resumen',filter='activos',editing=null,lastCount=null;
+const TABS=[['resumen','Resumen'],['pedidos','Pedidos'],['productos','Productos'],['ajustes','Ajustes']];
+const NEXT={nuevo:'preparando',preparando:'listo',listo:'entregado'};
+function toast(t){const m=$('#msg');m.textContent=t;m.style.display='block';setTimeout(()=>m.style.display='none',2500)}
+async function api(path,method='GET',body){
+  const r=await fetch('/api'+path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  if(r.status===401){location='/';throw 0}
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(typeof d.detail==='string'?d.detail:'Revisa los datos ingresados');
+  return d}
+function go(t){tab=t;$('#tabs').innerHTML=TABS.map(([k,l])=>`<button class="${k===t?'on':''}" onclick="go('${k}')">${l}</button>`).join('');
+  ({resumen:rResumen,pedidos:rPedidos,productos:rProductos,ajustes:rAjustes})[t]().catch(e=>e&&toast(e.message))}
+async function init(){
+  me=await api('/me');
+  $('#who').innerHTML=`${me.owner.picture?`<img src="${esc(me.owner.picture)}" referrerpolicy="no-referrer">`:''}<b>${esc(me.restaurant?.name||me.owner.name||me.owner.email)}</b>`;
+  go(me.restaurant?'resumen':'ajustes');
+  if(!me.restaurant)toast('Primero crea tu restaurante');
+  setInterval(()=>{if(me.restaurant&&tab==='pedidos')rPedidos().catch(()=>{});if(me.restaurant&&tab==='resumen')rResumen().catch(()=>{})},15000)}
+async function rResumen(){
+  if(!me.restaurant)return go('ajustes');
+  const s=await api('/stats');const max=Math.max(...s.last7.map(d=>d.total),0);
+  $('#view').innerHTML=`<div class="cards">
+  <div class="card"><small>Ventas hoy</small><b>${money(s.sales_today)}</b></div>
+  <div class="card"><small>Pedidos hoy</small><b>${s.orders_today}</b></div>
+  <div class="card"><small>Pendientes</small><b>${s.pending}</b></div></div>
+  <h3>Últimos 7 días</h3><div class="bars">${s.last7.map(d=>`<div><i style="height:${max?Math.round(d.total/max*85):0}%" title="${money(d.total)}"></i><small>${esc(d.label)}</small></div>`).join('')}</div>
+  <h3>Stock bajo (3 o menos)</h3><div class="box">${s.low_stock.length?s.low_stock.map(p=>`<div class="row"><span>${esc(p.name)}</span><b>${p.stock}</b></div>`).join(''):'<span class="muted">Todo en orden.</span>'}</div>`}
+async function rPedidos(){
+  if(!me.restaurant)return go('ajustes');
+  const all=await api('/orders');
+  const active=all.filter(o=>['nuevo','preparando','listo'].includes(o.status)).length;
+  if(lastCount!==null&&active>lastCount){toast('🔔 ¡Pedido nuevo!');try{const c=new AudioContext(),o=c.createOscillator();o.connect(c.destination);o.start();o.stop(c.currentTime+.25)}catch(e){}}
+  lastCount=active;
+  const F={activos:o=>['nuevo','preparando','listo'].includes(o.status),entregados:o=>o.status==='entregado',cancelados:o=>o.status==='cancelado',todos:()=>true};
+  const list=all.filter(F[filter]);
+  $('#view').innerHTML=`<div class="chips">${Object.keys(F).map(k=>`<button class="${k===filter?'on':''}" onclick="filter='${k}';rPedidos()">${k[0].toUpperCase()+k.slice(1)}${k==='activos'?' ('+active+')':''}</button>`).join('')}</div>`+
+  (list.map(o=>{const ph=o.customer_phone.replace(/\D/g,'');const wa=ph.length===10?'57'+ph:ph;
+   return `<div class="box"><div class="row" style="border:0"><b>#${o.id} · ${esc(o.customer_name)}</b><span class="badge ${o.status}">${o.status}</span></div>
+   <div class="muted" style="font-size:13px">${new Date(o.created_at).toLocaleString('es-CO')} · <a href="https://wa.me/${wa}" target="_blank">${esc(o.customer_phone)}</a></div>
+   <div style="margin:8px 0">${o.items.map(i=>`${i.qty}× ${esc(i.name)}`).join('<br>')}</div>
+   ${o.notes?`<div class="muted">📝 ${esc(o.notes)}</div>`:''}
+   <div class="row" style="border:0"><b>${money(o.total)}</b><span>
+   ${NEXT[o.status]?`<button class="sm" onclick="setSt(${o.id},'${NEXT[o.status]}')">Pasar a ${NEXT[o.status]}</button> `:''}
+   ${!['entregado','cancelado'].includes(o.status)?`<button class="sm red" onclick="if(confirm('¿Cancelar pedido? Se devuelve el stock.'))setSt(${o.id},'cancelado')">Cancelar</button>`:''}</span></div></div>`}).join('')||'<p class="muted">No hay pedidos aquí.</p>')}
+async function setSt(id,st){try{await api('/orders/'+id,'PATCH',{status:st});rPedidos()}catch(e){toast(e.message)}}
+async function rProductos(){
+  if(!me.restaurant)return go('ajustes');
+  const ps=await api('/products');const e=ps.find(p=>p.id===editing)||{};
+  $('#view').innerHTML=`<div class="box"><b>${e.id?'Editar producto':'Nuevo producto'}</b>
+  <label>Nombre</label><input id="pn" value="${esc(e.name)}">
+  <div class="g2"><div><label>Precio (COP)</label><input id="pp" type="number" min="0" value="${e.price??''}"></div>
+  <div><label>Stock</label><input id="ps" type="number" min="0" value="${e.stock??''}"></div></div>
+  <label>Categoría</label><input id="pc" value="${esc(e.category||'General')}" list="cats">
+  <datalist id="cats">${[...new Set(ps.map(p=>p.category))].map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+  <label>Descripción</label><input id="pd" value="${esc(e.description)}">
+  <button class="pri" onclick="saveP(${e.id||0},${e.available===false?'false':'true'})">Guardar</button>
+  ${e.id?'<button class="sm" onclick="editing=null;rProductos()">Cancelar</button>':''}</div>`+
+  (ps.map(p=>`<div class="box" style="${p.available?'':'opacity:.55'}"><div class="row" style="border:0"><span><b>${esc(p.name)}</b> <span class="muted">· ${esc(p.category)}</span></span><b>${money(p.price)}</b></div>
+  <div class="row" style="border:0"><span class="${p.stock<=3?'red':''}">Stock: <b>${p.stock}</b></span><span>
+  <button class="sm" onclick="editing=${p.id};rProductos();scrollTo(0,0)">Editar</button>
+  <button class="sm" onclick="toggleP(${p.id})">${p.available?'Ocultar':'Mostrar'}</button>
+  <button class="sm red" onclick="if(confirm('¿Eliminar?'))delP(${p.id})">Eliminar</button></span></div></div>`).join('')||'<p class="muted">Agrega tu primer producto.</p>')}
+async function saveP(id,available){
+  const b={name:$('#pn').value,price:+$('#pp').value,stock:+$('#ps').value,category:$('#pc').value||'General',description:$('#pd').value,available};
+  try{await api('/products'+(id?'/'+id:''),id?'PUT':'POST',b);editing=null;toast('Guardado');rProductos()}catch(e){toast(e.message)}}
+async function toggleP(id){const ps=await api('/products');const p=ps.find(x=>x.id===id);p.available=!p.available;await api('/products/'+id,'PUT',p);rProductos()}
+async function delP(id){await api('/products/'+id,'DELETE');rProductos()}
+function rAjustes(){
+  const r=me.restaurant||{name:'',slug:'',whatsapp:'57',is_open:true};const url=r.slug?location.origin+'/r/'+r.slug:'';
+  $('#view').innerHTML=`<div class="box"><b>${me.restaurant?'Datos del restaurante':'Crea tu restaurante'}</b>
+  <label>Nombre</label><input id="rn" value="${esc(r.name)}">
+  <label>Enlace (solo minúsculas, números y guiones)</label><input id="rs" value="${esc(r.slug)}" placeholder="don-porko">
+  <label>WhatsApp con indicativo (ej: 573001234567)</label><input id="rw" value="${esc(r.whatsapp)}" inputmode="numeric">
+  <label><input type="checkbox" id="ro" ${r.is_open?'checked':''} style="width:auto"> Abierto (recibiendo pedidos)</label><br><br>
+  <button class="pri" onclick="saveR()">Guardar</button></div>
+  ${url?`<div class="box"><b>Tu menú para clientes</b><p><a href="${esc(url)}" target="_blank">${esc(url)}</a></p>
+  <button class="sm" onclick="navigator.clipboard.writeText('${esc(url)}');toast('Enlace copiado')">Copiar enlace</button></div>`:''}`}
+async function saveR(){
+  try{me.restaurant=await api('/restaurant','PUT',{name:$('#rn').value,slug:$('#rs').value.trim().toLowerCase(),whatsapp:$('#rw').value.trim(),is_open:$('#ro').checked});
+  toast('Guardado');init()}catch(e){toast(e.message)}}
+init();
+</script></body></html>

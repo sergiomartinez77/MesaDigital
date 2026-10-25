@@ -1,0 +1,46 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Menú</title>
+<style>*{box-sizing:border-box}body{font-family:system-ui,sans-serif;max-width:520px;margin:auto;padding:16px 16px 120px;color:#222}
+h1{margin:0 0 4px}h3{margin:20px 0 4px;color:#c2410c}.closed{background:#fee2e2;padding:12px;border-radius:8px}
+.p{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #eee}
+.p small{color:#666;display:block}.q{display:flex;align-items:center;gap:10px}
+.q button{width:34px;height:34px;border-radius:50%;border:1px solid #ccc;background:#fff;font-size:18px}
+input,textarea{width:100%;padding:10px;margin-top:8px;border:1px solid #ccc;border-radius:8px;font:inherit}
+.bar{position:fixed;left:0;right:0;bottom:0;background:#fff;padding:12px 16px;box-shadow:0 -2px 12px #0002}
+.bar button{width:100%;max-width:520px;display:block;margin:auto;padding:14px;background:#25d366;border:0;color:#fff;font-size:16px;border-radius:10px}
+.bar button:disabled{background:#aaa}</style></head>
+<body><h1 id="title">…</h1><div id="menu"></div><div id="form" style="display:none">
+<h3>Tus datos</h3><input id="n" placeholder="Tu nombre"><input id="t" type="tel" placeholder="Tu teléfono">
+<textarea id="notes" rows="2" placeholder="Dirección o notas (opcional)"></textarea></div>
+<div class="bar"><button id="go" disabled onclick="send()">Pedir por WhatsApp</button></div>
+<script>
+const slug=location.pathname.split('/')[2],cart={};let prods=[];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>'$'+Number(n).toLocaleString('es-CO');
+async function load(){
+  const d=await (await fetch(`/r/${slug}/data`)).json();prods=d.products;
+  document.title=d.name;document.getElementById('title').textContent=d.name;
+  if(!d.is_open){document.getElementById('menu').innerHTML='<p class="closed">Estamos cerrados por ahora. ¡Vuelve pronto!</p>';return}
+  let cat='',h='';
+  for(const p of prods){if(p.category!==cat){cat=p.category;h+=`<h3>${esc(cat)}</h3>`}
+    h+=`<div class="p"><div>${esc(p.name)}<small>${esc(p.description)}</small><b>${money(p.price)}</b>${p.stock<1?'<small>Agotado</small>':''}</div>
+    <div class="q">${p.stock<1?'':`<button onclick="chg(${p.id},-1)">−</button><span id="c${p.id}">0</span><button onclick="chg(${p.id},1)">+</button>`}</div></div>`}
+  document.getElementById('menu').innerHTML=h||'<p>Aún no hay productos.</p>';
+  document.getElementById('form').style.display=prods.length?'block':'none';
+}
+function chg(id,d){const p=prods.find(x=>x.id===id);const v=Math.max(0,Math.min(p.stock,(cart[id]||0)+d));cart[id]=v;
+  document.getElementById('c'+id).textContent=v;
+  const tot=prods.reduce((a,x)=>a+(cart[x.id]||0)*x.price,0);const go=document.getElementById('go');
+  go.disabled=tot===0;go.textContent=tot?`Pedir por WhatsApp · ${money(tot)}`:'Pedir por WhatsApp'}
+async function send(){
+  const lines=Object.entries(cart).filter(([,q])=>q>0).map(([id,q])=>({product_id:+id,qty:q}));
+  const n=document.getElementById('n').value,t=document.getElementById('t').value;
+  if(!n||!t)return alert('Escribe tu nombre y teléfono');
+  const r=await fetch(`/r/${slug}/orders`,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({customer_name:n,customer_phone:t,notes:document.getElementById('notes').value,lines})});
+  const d=await r.json();
+  if(!r.ok)return alert(typeof d.detail==='string'?d.detail:'Revisa tus datos');
+  location.href=d.whatsapp_url;
+}
+load();
+</script></body></html>

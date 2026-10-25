@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+sqlmodel
+itsdangerous
+google-auth
+requests
+psycopg2-binary
